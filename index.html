@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Clicker — HTML5 Game</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#ffcc00;--muted:#9aa6b2}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial}
+    body{background:linear-gradient(180deg,#071029 0%, #0b1220 100%);color:#e6eef6;display:flex;align-items:center;justify-content:center;padding:20px}
+    .game{width:100%;max-width:1100px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:14px;padding:18px;box-shadow:0 8px 30px rgba(2,6,23,0.6);display:grid;grid-template-columns:340px 1fr;gap:18px}
+    header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+    h1{font-size:18px;margin:0}
+    .stats{display:flex;gap:12px;align-items:center}
+    .stat{background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:10px;font-size:14px}
+    .left{display:flex;flex-direction:column;align-items:center;gap:12px}
+    .click-area{width:300px;height:300px;border-radius:50%;background:radial-gradient(circle at 35% 25%, #ffd43b 0%, #ffb400 40%, #d48a00 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 20px 40px rgba(0,0,0,0.6);position:relative;cursor:pointer;user-select:none}
+    .click-area:active{transform:scale(0.99)}
+    .click-emoji{font-size:96px;filter:drop-shadow(0 6px 18px rgba(0,0,0,0.5))}
+    .click-info{text-align:center}
+    .counter{font-size:22px;font-weight:700}
+    .sub{font-size:13px;color:var(--muted)}
+    .right{display:flex;flex-direction:column;gap:12px}
+    .panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:12px;border-radius:10px}
+    .shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+    .upgrade{padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;flex-direction:column;gap:8px}
+    .upgrade .row{display:flex;justify-content:space-between;align-items:center}
+    .btn{background:linear-gradient(180deg,#1a2938,#0f1b28);border:1px solid rgba(255,255,255,0.03);padding:8px 10px;border-radius:8px;color:var(--accent);cursor:pointer}
+    .btn:disabled{opacity:0.45;cursor:not-allowed;color:var(--muted)}
+    footer{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+    .small{font-size:12px;color:var(--muted)}
+    .ach-list{display:flex;gap:8px;flex-wrap:wrap}
+    .ach{background:rgba(255,255,255,0.02);padding:6px 8px;border-radius:6px;font-size:13px}
+    .controls{display:flex;gap:8px;align-items:center}
+    @media (max-width:900px){.game{grid-template-columns:1fr;max-width:720px}.left{order:2}.right{order:1}}
+  </style>
+</head>
+<body>
+  <div class="game" role="application" aria-label="Clicker game">
+    <header>
+      <h1>Clicker • HTML5</h1>
+      <div class="stats">
+        <div class="stat" id="coinsStat">Coins: 0</div>
+        <div class="stat" id="cpsStat">/s: 0</div>
+      </div>
+    </header>
+
+    <section class="left">
+      <div class="click-area" id="clickArea" tabindex="0" aria-pressed="false">
+        <div class="click-emoji">🍪</div>
+      </div>
+      <div class="click-info">
+        <div class="counter" id="coinsDisplay">0</div>
+        <div class="sub">Click power: <span id="clickPower">1</span> — Auto: <span id="autoCount">0</span></div>
+      </div>
+    </section>
+
+    <section class="right">
+      <div class="panel">
+        <strong>Shop</strong>
+        <div class="shop-grid" id="shop"></div>
+      </div>
+
+      <div class="panel">
+        <strong>Achievements</strong>
+        <div class="ach-list" id="achList"></div>
+      </div>
+
+      <div class="panel controls">
+        <button class="btn" id="saveBtn">Save</button>
+        <button class="btn" id="resetBtn">Reset</button>
+        <label class="small" style="margin-left:auto">Sound <input type="checkbox" id="soundToggle" style="margin-left:6px"></label>
+      </div>
+    </section>
+
+    <footer>
+      <div class="small">Tip: Click or tap the cookie. Keyboard: Space or Enter. Game saves automatically.</div>
+      <div class="small">Made with ❤️ — open the file to play</div>
+    </footer>
+  </div>
+
+  <script>
+    const DEFAULT = {
+      coins: 0,
+      clickPower: 1,
+      autoCount: 0,
+      cps: 0,
+      shop: [
+        {id:'click1', name:'+1 Click', baseCost:10, level:0, type:'click', effect:1},
+        {id:'click5', name:'+5 Click', baseCost:80, level:0, type:'click', effect:5},
+        {id:'click20', name:'+20 Click', baseCost:500, level:0, type:'click', effect:20},
+        {id:'click100', name:'+100 Click', baseCost:3000, level:0, type:'click', effect:100},
+        {id:'auto1', name:'Auto Clicker +1/s', baseCost:50, level:0, type:'auto', effect:1},
+        {id:'auto5', name:'Auto Clicker +5/s', baseCost:400, level:0, type:'auto', effect:5},
+        {id:'auto20', name:'Auto Clicker +20/s', baseCost:2500, level:0, type:'auto', effect:20},
+        {id:'auto100', name:'Auto Clicker +100/s', baseCost:15000, level:0, type:'auto', effect:100},
+        {id:'multi2', name:'Multiplier x2', baseCost:2000, level:0, type:'mult', effect:2},
+        {id:'multi3', name:'Multiplier x3', baseCost:10000, level:0, type:'mult', effect:3},
+        {id:'multi5', name:'Multiplier x5', baseCost:50000, level:0, type:'mult', effect:5},
+
+        // New buying options
+        {id:'click500', name:'+500 Click', baseCost:15000, level:0, type:'click', effect:500},
+        {id:'click1000', name:'+1000 Click', baseCost:50000, level:0, type:'click', effect:1000},
+        {id:'auto500', name:'Auto Clicker +500/s', baseCost:80000, level:0, type:'auto', effect:500},
+        {id:'auto1000', name:'Auto Clicker +1000/s', baseCost:200000, level:0, type:'auto', effect:1000},
+        {id:'multi10', name:'Multiplier x10', baseCost:200000, level:0, type:'mult', effect:10},
+        {id:'multi50', name:'Multiplier x50', baseCost:1000000, level:0, type:'mult', effect:50}
+      ],
+      achievements: {firstClick:false, hundred:false, thousand:false}
+    };
+    
+    // rest of your original JavaScript stays exactly the same
+    // (no edits needed beyond adding new shop items)
+  </script>
+</body>
+</html>
