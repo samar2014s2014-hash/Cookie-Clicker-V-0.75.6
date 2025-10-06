@@ -1,1 +1,0 @@
-# Cookie-Clicker-V-0.75.6
