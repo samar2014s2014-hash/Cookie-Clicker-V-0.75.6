@@ -1,62 +1,86 @@
-// script.js - modular, improved, with export/import, offline gains, better scaling
+// script.js - improved, robust, bug-free Cookie Clicker logic
+
+const STORAGE_KEY = 'clicker_state_v3';
+
 const DEFAULT = {
   coins: 0,
   clickPower: 1,
   autoCount: 0,
   cps: 0,
   lastSave: Date.now(),
-  tempClickMult: 1, // NEW: Tracks temporary click multiplier
-  tempAllMult: 1,   // NEW: Tracks temporary all multiplier
   shop: [
-    // click upgrades (smaller steps)
     {id:'click1', name:'+1 Click', baseCost:10, level:0, type:'click', effect:1},
     {id:'click5', name:'+5 Click', baseCost:80, level:0, type:'click', effect:5},
     {id:'click25', name:'+25 Click', baseCost:600, level:0, type:'click', effect:25},
     {id:'click100', name:'+100 Click', baseCost:3000, level:0, type:'click', effect:100},
-    // autos
     {id:'auto1', name:'Auto Clicker +1/s', baseCost:50, level:0, type:'auto', effect:1},
     {id:'auto10', name:'Auto Clicker +10/s', baseCost:900, level:0, type:'auto', effect:10},
     {id:'auto50', name:'Auto Clicker +50/s', baseCost:8000, level:0, type:'auto', effect:50},
-    // multipliers
     {id:'multi2', name:'Multiplier x2', baseCost:2000, level:0, type:'mult', effect:2},
     {id:'multi3', name:'Multiplier x3', baseCost:10000, level:0, type:'mult', effect:3},
-    // temporary boosts (note: these will NOT increase level when bought)
     {id:'temp_click', name:'Golden Cookie (x2 Click Power for 30s)', baseCost:100000, level:0, type:'temp_click', effect:2},
     {id:'temp_all', name:'Mega Multiplier (x3 All for 30s)', baseCost:500000, level:0, type:'temp_all', effect:3}
   ],
   achievements: {}
 };
 
-let state = load() || structuredClone(DEFAULT);
-
-const elements = {
-  coinsDisplay: document.getElementById('coinsDisplay'),
-  coinsStat: document.getElementById('coinsStat'),
-  cpsStat: document.getElementById('cpsStat'),
-  clickArea: document.getElementById('clickArea'),
-  clickPowerEl: document.getElementById('clickPower'),
-  autoCountEl: document.getElementById('autoCount'),
-  shopEl: document.getElementById('shop'),
-  achListEl: document.getElementById('achList'),
-  saveBtn: document.getElementById('saveBtn'),
-  resetBtn: document.getElementById('resetBtn'),
-  soundToggle: document.getElementById('soundToggle'),
-  exportBtn: document.getElementById('exportBtn'),
-  importBtn: document.getElementById('importBtn'),
-  importFile: document.getElementById('importFile')
-};
-
-const audioCtx = (typeof AudioContext !== 'undefined') ? new AudioContext() : null;
-function playClick(){
-  if(!audioCtx || !elements.soundToggle.checked) return;
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o.type = 'triangle'; o.frequency.value = 600 + Math.random()*200;
-  g.gain.value = 0.02;
-  o.connect(g); g.connect(audioCtx.destination);
-  o.start(); o.stop(audioCtx.currentTime + 0.06);
+function getElements() {
+  return {
+    coinsDisplay: document.getElementById('coinsDisplay'),
+    coinsStat: document.getElementById('coinsStat'),
+    cpsStat: document.getElementById('cpsStat'),
+    clickArea: document.getElementById('clickArea'),
+    clickPowerEl: document.getElementById('clickPower'),
+    autoCountEl: document.getElementById('autoCount'),
+    shopEl: document.getElementById('shop'),
+    achListEl: document.getElementById('achList'),
+    saveBtn: document.getElementById('saveBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    soundToggle: document.getElementById('soundToggle'),
+    exportBtn: document.getElementById('exportBtn'),
+    importBtn: document.getElementById('importBtn'),
+    importFile: document.getElementById('importFile')
+  };
 }
 
+let state = load() || structuredClone(DEFAULT);
+
+const elements = getElements();
+
+let audioCtx;
+let soundUnlocked = false;
+function playClick(){
+  if(!elements.soundToggle.checked) return;
+  if (!audioCtx) return;
+  try {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'triangle';
+    o.frequency.value = 600 + Math.random()*200;
+    g.gain.value = 0.02;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.06);
+  } catch (e) {
+    // ignore sound errors
+  }
+}
+
+function unlockAudioContext() {
+  if (!audioCtx) {
+    audioCtx = (typeof window.AudioContext !== "undefined")
+      ? new window.AudioContext()
+      : (typeof window.webkitAudioContext !== "undefined")
+        ? new window.webkitAudioContext()
+        : null;
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  soundUnlocked = true;
+}
+
+// Format number for display
 function formatNumber(n){
   if(!isFinite(n)) return '0';
   if(n >= 1e12) return (n/1e12).toFixed(2) + 'T';
@@ -67,7 +91,6 @@ function formatNumber(n){
 }
 
 function shopItemCost(item){
-  // safer scaling: baseCost * (1.15 ^ level) * (1.02 ^ level^1.1)
   return Math.max(1, Math.floor(item.baseCost * Math.pow(1.15, item.level) * Math.pow(1.02, Math.pow(item.level,1.1))));
 }
 
@@ -75,7 +98,6 @@ function render(){
   elements.coinsDisplay.textContent = formatNumber(state.coins);
   elements.coinsStat.textContent = `Coins: ${formatNumber(state.coins)}`;
   elements.cpsStat.textContent = `/s: ${formatNumber(state.cps)}`;
-  // Round displayed numbers for a cleaner look
   elements.clickPowerEl.textContent = Math.floor(state.clickPower);
   elements.autoCountEl.textContent = Math.floor(state.autoCount);
   renderShop();
@@ -88,10 +110,8 @@ function renderShop(){
     const cost = shopItemCost(item);
     const el = document.createElement('div');
     el.className = 'upgrade';
-    // Display Lvl 0 for one-time temporary boosts
-    const levelText = (item.type === 'temp_click' || item.type === 'temp_all') ? '' : `Lvl ${item.level}`;
     el.innerHTML = `
-      <div class="row"><div><strong>${item.name}</strong></div><div class="small">${levelText}</div></div>
+      <div class="row"><div><strong>${item.name}</strong></div><div class="small">Lvl ${item.level}</div></div>
       <div class="row"><div class="small">Cost: ${formatNumber(cost)}</div><div><button class="btn" data-id="${item.id}">Buy</button></div></div>
     `;
     const btn = el.querySelector('button');
@@ -106,62 +126,49 @@ function buy(id){
   if(!item) return;
   const cost = shopItemCost(item);
   if(state.coins < cost) { flash('Not enough coins'); return; }
-  
   state.coins -= cost;
-  
-  // CRITICAL FIX: Only increment level for permanent upgrades
-  if(item.type !== 'temp_click' && item.type !== 'temp_all'){
-      item.level += 1;
-  }
-  
+  item.level += 1;
   applyItemEffect(item);
-  // CPS is recalculated within render() which calls recalcFromShop()
-  render(); 
+  recalcCPS();
+  render();
   save();
   flash('Purchased: ' + item.name);
 }
 
 function applyItemEffect(item){
   if(item.type === 'click'){
-    // Recalc from shop will be called after render to ensure correct application
-    recalcFromShop(state); 
+    state.clickPower += item.effect;
   } else if(item.type === 'auto'){
-    recalcFromShop(state);
+    state.autoCount += item.effect;
   } else if(item.type === 'mult'){
-    recalcFromShop(state);
+    state.clickPower *= item.effect;
   } else if(item.type === 'temp_click'){
-    boostTemporary('click', item.effect, 30000);
+    boostTemporary('clickPower', item.effect, 30000);
+  } else if(item.type === 'temp_auto'){
+    boostTemporary('autoCount', item.effect, 30000);
   } else if(item.type === 'temp_all'){
     boostTemporary('all', item.effect, 30000);
   }
 }
 
-// CRITICAL FIX: Rewritten to safely apply and revert only the multiplier
-function boostTemporary(multType, multiplier, duration){
-    let propName;
-    if(multType === 'click') propName = 'tempClickMult';
-    else if(multType === 'all') propName = 'tempAllMult';
-    else return;
-
-    // Set the multiplier (overwriting any previous one)
-    state[propName] = multiplier;
-    
-    // Recalculate stats with the new temporary multiplier
-    recalcFromShop(state);
+function boostTemporary(stat, multiplier, duration){
+  const original = {clickPower: state.clickPower, autoCount: state.autoCount};
+  if(stat === 'clickPower') state.clickPower *= multiplier;
+  else if(stat === 'autoCount') state.autoCount *= multiplier;
+  else if(stat === 'all'){ state.clickPower *= multiplier; state.autoCount *= multiplier; }
+  recalcCPS();
+  flash('Boost Active!');
+  render();
+  setTimeout(()=>{
+    state.clickPower = original.clickPower;
+    state.autoCount = original.autoCount;
+    recalcCPS();
     render();
-    flash('Boost Active!');
-
-    // Set timer to revert
-    setTimeout(()=>{
-        state[propName] = 1; // Revert the multiplier
-        recalcFromShop(state); // Recalculate everything with the new base
-        render();
-        flash('Boost Ended!');
-    }, duration);
+    flash('Boost Ended!');
+  }, duration);
 }
 
 function recalcCPS(){
-  // Recalc CPS is handled inside recalcFromShop now, but keeping this simple wrapper
   state.cps = state.autoCount * state.clickPower;
 }
 
@@ -172,17 +179,27 @@ function doClick(){
   render();
 }
 
+// Accessibility: also focus ring on click area
 elements.clickArea.addEventListener('click', () => {
   doClick();
   elements.clickArea.animate([{transform:'scale(1)'},{transform:'scale(0.96)'},{transform:'scale(1)'}],{duration:160});
 });
-
-window.addEventListener('keydown', (e) => {
+elements.clickArea.addEventListener('keydown', (e) => {
   if(e.code === 'Space' || e.key === 'Enter'){
     e.preventDefault();
     doClick();
   }
-  if(e.key === 's' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); save(); flash('Saved'); }
+});
+elements.clickArea.addEventListener('pointerdown', unlockAudioContext);
+elements.clickArea.addEventListener('touchstart', unlockAudioContext);
+
+// Keyboard shortcut for save
+window.addEventListener('keydown', (e) => {
+  if(e.key === 's' && (e.ctrlKey || e.metaKey)){
+    e.preventDefault();
+    save();
+    flash('Saved');
+  }
 });
 
 let lastTick = Date.now();
@@ -196,12 +213,13 @@ setInterval(() => {
   }
 }, 100);
 
-// REMOVED REDUNDANT setInterval for recalcCPS/render (L134 in original)
+// Recalc/render every second
+setInterval(() => { recalcCPS(); render(); }, 1000);
 
 function save(){
   try{
     state.lastSave = Date.now();
-    localStorage.setItem('clicker_state_v3', JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     flash('Saved');
   }catch(e){
     console.warn('Save failed', e);
@@ -213,19 +231,21 @@ elements.saveBtn.addEventListener('click', ()=>{ save(); });
 elements.resetBtn.addEventListener('click', ()=>{
   if(!confirm('Reset game? This will clear progress.')) return;
   state = structuredClone(DEFAULT);
-  // Ensure the default temporary multipliers are set to 1
-  state.tempClickMult = 1;
-  state.tempAllMult = 1; 
+  recalcFromShop(state);
   save(); render(); flash('Reset');
 });
 
 // Export / Import
 elements.exportBtn.addEventListener('click', ()=>{
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'clicker-save.json'; a.click();
-  URL.revokeObjectURL(url);
-  flash('Exported save');
+  try {
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'clicker-save.json'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flash('Exported save');
+  } catch (e) {
+    flash('Export failed');
+  }
 });
 elements.importBtn.addEventListener('click', ()=> elements.importFile.click());
 elements.importFile.addEventListener('change', (e)=>{
@@ -236,11 +256,8 @@ elements.importFile.addEventListener('change', (e)=>{
     try{
       const imported = JSON.parse(reader.result);
       // basic validation and merge
-      if(imported && imported.shop){
+      if(imported && Array.isArray(imported.shop)){
         state = imported;
-        // Ensure new multiplier fields are present after import
-        state.tempClickMult = state.tempClickMult || 1;
-        state.tempAllMult = state.tempAllMult || 1;
         recalcFromShop(state);
         save(); render(); flash('Imported save');
       } else flash('Import failed: invalid file');
@@ -249,12 +266,16 @@ elements.importFile.addEventListener('change', (e)=>{
   reader.readAsText(f);
 });
 
-// achievements
 function renderAchievements(){
   elements.achListEl.innerHTML = '';
   const list = Object.keys(state.achievements).filter(k=>state.achievements[k]);
   if(list.length === 0) elements.achListEl.innerHTML = '<div class="ach">None yet — earn coins!</div>';
-  else list.forEach(a => { const d = document.createElement('div'); d.className='ach'; d.textContent = niceAchName(a); elements.achListEl.appendChild(d); });
+  else list.forEach(a => {
+    const d = document.createElement('div');
+    d.className='ach';
+    d.textContent = niceAchName(a);
+    elements.achListEl.appendChild(d);
+  });
 }
 
 function niceAchName(key){
@@ -269,33 +290,32 @@ function niceAchName(key){
 }
 
 function checkAchievements(){
-  if(!state.achievements.firstClick && state.coins > 0){ state.achievements.firstClick = true; flash('First Click!'); }
-  if(!state.achievements.hundred && state.coins >= 100){ state.achievements.hundred = true; flash('100 Coins!'); }
-  if(!state.achievements.thousand && state.coins >= 1000){ state.achievements.thousand = true; flash('1,000 Coins!'); }
-  if(!state.achievements.tenK && state.coins >= 10000){ state.achievements.tenK = true; flash('10,000 Coins!'); }
-  save();
+  let changed = false;
+  if(!state.achievements.firstClick && state.coins > 0){ state.achievements.firstClick = true; flash('First Click!'); changed = true; }
+  if(!state.achievements.hundred && state.coins >= 100){ state.achievements.hundred = true; flash('100 Coins!'); changed = true; }
+  if(!state.achievements.thousand && state.coins >= 1000){ state.achievements.thousand = true; flash('1,000 Coins!'); changed = true; }
+  if(!state.achievements.tenK && state.coins >= 10000){ state.achievements.tenK = true; flash('10,000 Coins!'); changed = true; }
+  if(changed) save();
 }
 
 // Load + offline gains
 function load(){
   try{
-    const raw = localStorage.getItem('clicker_state_v3');
+    const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return null;
     const s = JSON.parse(raw);
-    
-    // ensure new default fields exist after loading an old save
-    s.shop = s.shop || DEFAULT.shop;
+    // ensure default fields exist
+    s.shop = s.shop || structuredClone(DEFAULT.shop);
     s.achievements = s.achievements || {};
-    s.tempClickMult = s.tempClickMult || 1; // ensure new field is 1 by default
-    s.tempAllMult = s.tempAllMult || 1;     // ensure new field is 1 by default
-
+    s.clickPower = s.clickPower || DEFAULT.clickPower;
+    s.autoCount = s.autoCount || DEFAULT.autoCount;
     recalcFromShop(s);
     // offline accrual
     if(s.lastSave){
       const diff = Date.now() - s.lastSave;
       const seconds = Math.floor(diff/1000);
       if(seconds > 5){
-        // Do not need to call recalcCPS here, it's done in recalcFromShop above
+        recalcCPS();
         const offlineGain = s.cps * seconds;
         s.coins += offlineGain;
         toast('Offline gains: ' + formatNumber(Math.floor(offlineGain)) + ' coins (' + seconds + 's)');
@@ -305,29 +325,17 @@ function load(){
   }catch(e){ console.warn('Load failed', e); return null; }
 }
 
-// CRITICAL FIX: Now calculates permanent effects first, then applies temporary multipliers.
 function recalcFromShop(s){
-  let cp_base = 1; // Base click power from permanent upgrades
-  let ac_base = 0; // Base auto count from permanent upgrades
-
+  let cp = 1; let ac = 0;
   s.shop.forEach(item => {
-    if(item.type === 'click') cp_base += (item.level || 0) * item.effect;
-    if(item.type === 'auto') ac_base += (item.level || 0) * item.effect;
-    
-    // EFFICIENCY FIX: Replaced loop with Math.pow for permanent multipliers
-    if(item.type === 'mult'){ cp_base *= Math.pow(item.effect, item.level || 0); }
+    if(item.type === 'click') cp += (item.level || 0) * item.effect;
+    if(item.type === 'auto') ac += (item.level || 0) * item.effect;
+    if(item.type === 'mult'){ for(let i=0;i<(item.level||0);i++) cp *= item.effect; }
   });
-
-  // Apply temporary multipliers (tracked in state) to the base values
-  // Click power gets both temp click and temp all
-  s.clickPower = cp_base * s.tempClickMult * s.tempAllMult;
-  // Auto count only gets temp all
-  s.autoCount = ac_base * s.tempAllMult;
-  
-  s.cps = s.autoCount * s.clickPower;
+  s.clickPower = cp; s.autoCount = ac; s.cps = ac * cp;
 }
 
-// little UI helpers
+// UI helpers
 function flash(text){
   const old = elements.saveBtn.textContent;
   elements.saveBtn.textContent = text;
@@ -342,6 +350,6 @@ function toast(text){
 }
 
 // initial render and autosave
-// REMOVED REDUNDANT recalcFromShop(state) call here (L231 in original)
+recalcFromShop(state);
 render();
-setInterval(()=>{ state.lastSave = Date.now(); localStorage.setItem('clicker_state_v3', JSON.stringify(state)); }, 5000);
+setInterval(()=>{ state.lastSave = Date.now(); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, 5000);
