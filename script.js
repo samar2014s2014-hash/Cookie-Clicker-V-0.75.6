@@ -5,6 +5,8 @@ const DEFAULT = {
   autoCount: 0,
   cps: 0,
   lastSave: Date.now(),
+  tempClickMult: 1, // NEW: Tracks temporary click multiplier
+  tempAllMult: 1,   // NEW: Tracks temporary all multiplier
   shop: [
     // click upgrades (smaller steps)
     {id:'click1', name:'+1 Click', baseCost:10, level:0, type:'click', effect:1},
@@ -18,7 +20,7 @@ const DEFAULT = {
     // multipliers
     {id:'multi2', name:'Multiplier x2', baseCost:2000, level:0, type:'mult', effect:2},
     {id:'multi3', name:'Multiplier x3', baseCost:10000, level:0, type:'mult', effect:3},
-    // temporary boosts
+    // temporary boosts (note: these will NOT increase level when bought)
     {id:'temp_click', name:'Golden Cookie (x2 Click Power for 30s)', baseCost:100000, level:0, type:'temp_click', effect:2},
     {id:'temp_all', name:'Mega Multiplier (x3 All for 30s)', baseCost:500000, level:0, type:'temp_all', effect:3}
   ],
@@ -73,6 +75,7 @@ function render(){
   elements.coinsDisplay.textContent = formatNumber(state.coins);
   elements.coinsStat.textContent = `Coins: ${formatNumber(state.coins)}`;
   elements.cpsStat.textContent = `/s: ${formatNumber(state.cps)}`;
+  // Round displayed numbers for a cleaner look
   elements.clickPowerEl.textContent = Math.floor(state.clickPower);
   elements.autoCountEl.textContent = Math.floor(state.autoCount);
   renderShop();
@@ -85,8 +88,10 @@ function renderShop(){
     const cost = shopItemCost(item);
     const el = document.createElement('div');
     el.className = 'upgrade';
+    // Display Lvl 0 for one-time temporary boosts
+    const levelText = (item.type === 'temp_click' || item.type === 'temp_all') ? '' : `Lvl ${item.level}`;
     el.innerHTML = `
-      <div class="row"><div><strong>${item.name}</strong></div><div class="small">Lvl ${item.level}</div></div>
+      <div class="row"><div><strong>${item.name}</strong></div><div class="small">${levelText}</div></div>
       <div class="row"><div class="small">Cost: ${formatNumber(cost)}</div><div><button class="btn" data-id="${item.id}">Buy</button></div></div>
     `;
     const btn = el.querySelector('button');
@@ -101,42 +106,62 @@ function buy(id){
   if(!item) return;
   const cost = shopItemCost(item);
   if(state.coins < cost) { flash('Not enough coins'); return; }
+  
   state.coins -= cost;
-  item.level += 1;
+  
+  // CRITICAL FIX: Only increment level for permanent upgrades
+  if(item.type !== 'temp_click' && item.type !== 'temp_all'){
+      item.level += 1;
+  }
+  
   applyItemEffect(item);
-  recalcCPS();
-  render();
+  // CPS is recalculated within render() which calls recalcFromShop()
+  render(); 
   save();
   flash('Purchased: ' + item.name);
 }
 
 function applyItemEffect(item){
   if(item.type === 'click'){
-    state.clickPower += item.effect;
+    // Recalc from shop will be called after render to ensure correct application
+    recalcFromShop(state); 
   } else if(item.type === 'auto'){
-    state.autoCount += item.effect;
+    recalcFromShop(state);
   } else if(item.type === 'mult'){
-    state.clickPower *= item.effect;
+    recalcFromShop(state);
   } else if(item.type === 'temp_click'){
-    boostTemporary('clickPower', item.effect, 30000);
-  } else if(item.type === 'temp_auto'){
-    boostTemporary('autoCount', item.effect, 30000);
+    boostTemporary('click', item.effect, 30000);
   } else if(item.type === 'temp_all'){
     boostTemporary('all', item.effect, 30000);
   }
 }
 
-function boostTemporary(stat, multiplier, duration){
-  const original = {clickPower: state.clickPower, autoCount: state.autoCount};
-  if(stat === 'clickPower') state.clickPower *= multiplier;
-  else if(stat === 'autoCount') state.autoCount *= multiplier;
-  else if(stat === 'all'){ state.clickPower *= multiplier; state.autoCount *= multiplier; }
-  flash('Boost Active!');
-  render();
-  setTimeout(()=>{ state.clickPower = original.clickPower; state.autoCount = original.autoCount; recalcCPS(); render(); flash('Boost Ended!'); }, duration);
+// CRITICAL FIX: Rewritten to safely apply and revert only the multiplier
+function boostTemporary(multType, multiplier, duration){
+    let propName;
+    if(multType === 'click') propName = 'tempClickMult';
+    else if(multType === 'all') propName = 'tempAllMult';
+    else return;
+
+    // Set the multiplier (overwriting any previous one)
+    state[propName] = multiplier;
+    
+    // Recalculate stats with the new temporary multiplier
+    recalcFromShop(state);
+    render();
+    flash('Boost Active!');
+
+    // Set timer to revert
+    setTimeout(()=>{
+        state[propName] = 1; // Revert the multiplier
+        recalcFromShop(state); // Recalculate everything with the new base
+        render();
+        flash('Boost Ended!');
+    }, duration);
 }
 
 function recalcCPS(){
+  // Recalc CPS is handled inside recalcFromShop now, but keeping this simple wrapper
   state.cps = state.autoCount * state.clickPower;
 }
 
@@ -171,7 +196,7 @@ setInterval(() => {
   }
 }, 100);
 
-setInterval(() => { recalcCPS(); render(); }, 1000);
+// REMOVED REDUNDANT setInterval for recalcCPS/render (L134 in original)
 
 function save(){
   try{
@@ -188,6 +213,9 @@ elements.saveBtn.addEventListener('click', ()=>{ save(); });
 elements.resetBtn.addEventListener('click', ()=>{
   if(!confirm('Reset game? This will clear progress.')) return;
   state = structuredClone(DEFAULT);
+  // Ensure the default temporary multipliers are set to 1
+  state.tempClickMult = 1;
+  state.tempAllMult = 1; 
   save(); render(); flash('Reset');
 });
 
@@ -210,6 +238,9 @@ elements.importFile.addEventListener('change', (e)=>{
       // basic validation and merge
       if(imported && imported.shop){
         state = imported;
+        // Ensure new multiplier fields are present after import
+        state.tempClickMult = state.tempClickMult || 1;
+        state.tempAllMult = state.tempAllMult || 1;
         recalcFromShop(state);
         save(); render(); flash('Imported save');
       } else flash('Import failed: invalid file');
@@ -251,18 +282,20 @@ function load(){
     const raw = localStorage.getItem('clicker_state_v3');
     if(!raw) return null;
     const s = JSON.parse(raw);
-    // ensure default fields exist
+    
+    // ensure new default fields exist after loading an old save
     s.shop = s.shop || DEFAULT.shop;
     s.achievements = s.achievements || {};
-    s.clickPower = s.clickPower || DEFAULT.clickPower;
-    s.autoCount = s.autoCount || DEFAULT.autoCount;
+    s.tempClickMult = s.tempClickMult || 1; // ensure new field is 1 by default
+    s.tempAllMult = s.tempAllMult || 1;     // ensure new field is 1 by default
+
     recalcFromShop(s);
     // offline accrual
     if(s.lastSave){
       const diff = Date.now() - s.lastSave;
       const seconds = Math.floor(diff/1000);
       if(seconds > 5){
-        recalcCPS();
+        // Do not need to call recalcCPS here, it's done in recalcFromShop above
         const offlineGain = s.cps * seconds;
         s.coins += offlineGain;
         toast('Offline gains: ' + formatNumber(Math.floor(offlineGain)) + ' coins (' + seconds + 's)');
@@ -272,14 +305,26 @@ function load(){
   }catch(e){ console.warn('Load failed', e); return null; }
 }
 
+// CRITICAL FIX: Now calculates permanent effects first, then applies temporary multipliers.
 function recalcFromShop(s){
-  let cp = 1; let ac = 0;
+  let cp_base = 1; // Base click power from permanent upgrades
+  let ac_base = 0; // Base auto count from permanent upgrades
+
   s.shop.forEach(item => {
-    if(item.type === 'click') cp += (item.level || 0) * item.effect;
-    if(item.type === 'auto') ac += (item.level || 0) * item.effect;
-    if(item.type === 'mult'){ for(let i=0;i<(item.level||0);i++) cp *= item.effect; }
+    if(item.type === 'click') cp_base += (item.level || 0) * item.effect;
+    if(item.type === 'auto') ac_base += (item.level || 0) * item.effect;
+    
+    // EFFICIENCY FIX: Replaced loop with Math.pow for permanent multipliers
+    if(item.type === 'mult'){ cp_base *= Math.pow(item.effect, item.level || 0); }
   });
-  s.clickPower = cp; s.autoCount = ac; s.cps = ac * cp;
+
+  // Apply temporary multipliers (tracked in state) to the base values
+  // Click power gets both temp click and temp all
+  s.clickPower = cp_base * s.tempClickMult * s.tempAllMult;
+  // Auto count only gets temp all
+  s.autoCount = ac_base * s.tempAllMult;
+  
+  s.cps = s.autoCount * s.clickPower;
 }
 
 // little UI helpers
@@ -297,6 +342,6 @@ function toast(text){
 }
 
 // initial render and autosave
-recalcFromShop(state);
+// REMOVED REDUNDANT recalcFromShop(state) call here (L231 in original)
 render();
 setInterval(()=>{ state.lastSave = Date.now(); localStorage.setItem('clicker_state_v3', JSON.stringify(state)); }, 5000);
