@@ -3,52 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clicker — HTML5 Game</title>
-  <style>
-    :root{--bg:#0f1724;--card:#0b1220;--accent:#ffcc00;--muted:#9aa6b2}
-    *{box-sizing:border-box}
-    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial}
-    body{background:linear-gradient(180deg,#071029 0%, #0b1220 100%);color:#e6eef6;display:flex;align-items:center;justify-content:center;padding:20px}
-    .game{width:100%;max-width:1100px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:14px;padding:18px;box-shadow:0 8px 30px rgba(2,6,23,0.6);display:grid;grid-template-columns:340px 1fr;gap:18px}
-    header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-    h1{font-size:18px;margin:0}
-    .stats{display:flex;gap:12px;align-items:center}
-    .stat{background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:10px;font-size:14px}
-    .left{display:flex;flex-direction:column;align-items:center;gap:12px}
-    .click-area{width:300px;height:300px;border-radius:50%;background:radial-gradient(circle at 35% 25%, #ffd43b 0%, #ffb400 40%, #d48a00 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 20px 40px rgba(0,0,0,0.6);position:relative;cursor:pointer;user-select:none}
-    .click-area:active{transform:scale(0.99)}
-    .click-emoji{font-size:96px;filter:drop-shadow(0 6px 18px rgba(0,0,0,0.5))}
-    .click-info{text-align:center}
-    .counter{font-size:22px;font-weight:700}
-    .sub{font-size:13px;color:var(--muted)}
-    .right{display:flex;flex-direction:column;gap:12px}
-    .panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:12px;border-radius:10px}
-    .shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
-    .upgrade{padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;flex-direction:column;gap:8px}
-    .upgrade .row{display:flex;justify-content:space-between;align-items:center}
-    .btn{background:linear-gradient(180deg,#1a2938,#0f1b28);border:1px solid rgba(255,255,255,0.03);padding:8px 10px;border-radius:8px;color:var(--accent);cursor:pointer}
-    .btn:disabled{opacity:0.45;cursor:not-allowed;color:var(--muted)}
-    footer{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;margin-top:8px}
-    .small{font-size:12px;color:var(--muted)}
-    .ach-list{display:flex;gap:8px;flex-wrap:wrap}
-    .ach{background:rgba(255,255,255,0.02);padding:6px 8px;border-radius:6px;font-size:13px}
-    .controls{display:flex;gap:8px;align-items:center}
-    @media (max-width:900px){.game{grid-template-columns:1fr;max-width:720px}.left{order:2}.right{order:1}}
-  </style>
+  <title>Clicker — HTML5 Game (Packaged)</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="game" role="application" aria-label="Clicker game">
     <header>
       <h1>Clicker • HTML5</h1>
-      <div class="stats">
+      <div class="stats" aria-hidden="false">
         <div class="stat" id="coinsStat">Coins: 0</div>
         <div class="stat" id="cpsStat">/s: 0</div>
       </div>
     </header>
 
     <section class="left">
-      <div class="click-area" id="clickArea" tabindex="0" aria-pressed="false">
-        <div class="click-emoji">🍪</div>
+      <div class="click-area" id="clickArea" tabindex="0" aria-pressed="false" role="button" aria-label="Cookie. Press to collect coins.">
+        <div class="click-emoji" id="cookieEmoji">🍪</div>
       </div>
       <div class="click-info">
         <div class="counter" id="coinsDisplay">0</div>
@@ -69,274 +39,20 @@
 
       <div class="panel controls">
         <button class="btn" id="saveBtn">Save</button>
+        <button class="btn" id="exportBtn">Export</button>
+        <input type="file" id="importFile" style="display:none" accept=".json">
+        <button class="btn" id="importBtn">Import</button>
         <button class="btn" id="resetBtn">Reset</button>
         <label class="small" style="margin-left:auto">Sound <input type="checkbox" id="soundToggle" style="margin-left:6px"></label>
       </div>
     </section>
 
     <footer>
-      <div class="small">Tip: Click or tap the cookie. Keyboard: Space or Enter. Game saves automatically.</div>
-      <div class="small">Made with ❤️ — open the file to play</div>
+      <div class="small">Tip: Click or tap the cookie. Keyboard: Space or Enter. Game saves automatically and supports export/import and offline gains.</div>
+      <div class="small">Packaged — open the folder to play</div>
     </footer>
   </div>
 
-  <script>
-    const DEFAULT = {
-      coins: 0,
-      clickPower: 1,
-      autoCount: 0,
-      cps: 0,
-      shop: [
-        // --- Click Power Upgrades ---
-        {id:'click1', name:'+1 Click', baseCost:10, level:0, type:'click', effect:1},
-        {id:'click5', name:'+5 Click', baseCost:80, level:0, type:'click', effect:5},
-        {id:'click20', name:'+20 Click', baseCost:500, level:0, type:'click', effect:20},
-        {id:'click100', name:'+100 Click', baseCost:3000, level:0, type:'click', effect:100},
-        {id:'click500', name:'+500 Click', baseCost:15000, level:0, type:'click', effect:500},
-        {id:'click1000', name:'+1,000 Click', baseCost:40000, level:0, type:'click', effect:1000},
-        {id:'click5000', name:'+5,000 Click', baseCost:200000, level:0, type:'click', effect:5000},
-        {id:'click10000', name:'+10,000 Click', baseCost:800000, level:0, type:'click', effect:10000},
-
-        // --- Auto Clickers ---
-        {id:'auto1', name:'Auto Clicker +1/s', baseCost:50, level:0, type:'auto', effect:1},
-        {id:'auto5', name:'Auto Clicker +5/s', baseCost:400, level:0, type:'auto', effect:5},
-        {id:'auto20', name:'Auto Clicker +20/s', baseCost:2500, level:0, type:'auto', effect:20},
-        {id:'auto100', name:'Auto Clicker +100/s', baseCost:15000, level:0, type:'auto', effect:100},
-        {id:'auto500', name:'Auto Clicker +500/s', baseCost:60000, level:0, type:'auto', effect:500},
-        {id:'auto1000', name:'Auto Clicker +1,000/s', baseCost:120000, level:0, type:'auto', effect:1000},
-        {id:'auto5000', name:'Auto Clicker +5,000/s', baseCost:600000, level:0, type:'auto', effect:5000},
-        {id:'auto10000', name:'Auto Clicker +10,000/s', baseCost:1500000, level:0, type:'auto', effect:10000},
-
-        // --- Multipliers ---
-        {id:'multi2', name:'Multiplier x2', baseCost:2000, level:0, type:'mult', effect:2},
-        {id:'multi3', name:'Multiplier x3', baseCost:10000, level:0, type:'mult', effect:3},
-        {id:'multi5', name:'Multiplier x5', baseCost:50000, level:0, type:'mult', effect:5},
-        {id:'multi10', name:'Multiplier x10', baseCost:250000, level:0, type:'mult', effect:10},
-        {id:'multi20', name:'Multiplier x20', baseCost:1000000, level:0, type:'mult', effect:20},
-        {id:'multi50', name:'Multiplier x50', baseCost:5000000, level:0, type:'mult', effect:50},
-        {id:'multi100', name:'Multiplier x100', baseCost:15000000, level:0, type:'mult', effect:100},
-
-        // --- Temporary Boosts ---
-        {id:'temp_click', name:'Golden Cookie (x2 Click Power for 30s)', baseCost:100000, level:0, type:'temp_click', effect:2},
-        {id:'temp_auto', name:'Auto Storm (x2 Auto Speed for 30s)', baseCost:200000, level:0, type:'temp_auto', effect:2},
-        {id:'temp_all', name:'Mega Multiplier (x3 All Coins for 30s)', baseCost:500000, level:0, type:'temp_all', effect:3}
-      ],
-      achievements: {firstClick:false, hundred:false, thousand:false}
-    };
-
-    let state = load() || JSON.parse(JSON.stringify(DEFAULT));
-
-    const coinsDisplay = document.getElementById('coinsDisplay');
-    const coinsStat = document.getElementById('coinsStat');
-    const cpsStat = document.getElementById('cpsStat');
-    const clickArea = document.getElementById('clickArea');
-    const clickPowerEl = document.getElementById('clickPower');
-    const autoCountEl = document.getElementById('autoCount');
-    const shopEl = document.getElementById('shop');
-    const achListEl = document.getElementById('achList');
-    const saveBtn = document.getElementById('saveBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const soundToggle = document.getElementById('soundToggle');
-
-    const audioCtx = typeof AudioContext !== 'undefined' ? new AudioContext() : null;
-    function playClick() {
-      if(!audioCtx || !soundToggle.checked) return;
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.type = 'sine'; o.frequency.value = 600; g.gain.value = 0.02;
-      o.connect(g); g.connect(audioCtx.destination);
-      o.start(); o.stop(audioCtx.currentTime + 0.05);
-    }
-
-    function render() {
-      coinsDisplay.textContent = formatNumber(state.coins);
-      coinsStat.textContent = `Coins: ${formatNumber(state.coins)}`;
-      cpsStat.textContent = `/s: ${formatNumber(state.cps)}`;
-      clickPowerEl.textContent = state.clickPower;
-      autoCountEl.textContent = state.autoCount;
-      renderShop();
-      renderAchievements();
-    }
-
-    function formatNumber(n){
-      if(n >= 1e9) return (n/1e9).toFixed(2) + 'B';
-      if(n >= 1e6) return (n/1e6).toFixed(2) + 'M';
-      if(n >= 1000) return (n/1000).toFixed(1) + 'K';
-      return Math.floor(n);
-    }
-
-    function shopItemCost(item){
-      return Math.floor(item.baseCost * Math.pow(1.18, item.level));
-    }
-
-    function renderShop(){
-      shopEl.innerHTML = '';
-      state.shop.forEach(item => {
-        const cost = shopItemCost(item);
-        const el = document.createElement('div');
-        el.className = 'upgrade';
-        el.innerHTML = `
-          <div class="row"><div><strong>${item.name}</strong></div><div class="small">Lvl ${item.level}</div></div>
-          <div class="row"><div class="small">Cost: ${cost}</div><div><button class="btn" data-id="${item.id}">Buy</button></div></div>
-        `;
-        const btn = el.querySelector('button');
-        btn.disabled = state.coins < cost;
-        btn.addEventListener('click', () => buy(item.id));
-        shopEl.appendChild(el);
-      });
-    }
-
-    function buy(id){
-      const item = state.shop.find(s=>s.id===id);
-      if(!item) return;
-      const cost = shopItemCost(item);
-      if(state.coins < cost) return;
-      state.coins -= cost;
-      item.level += 1;
-      applyItemEffect(item);
-      recalcCPS();
-      render();
-      save();
-    }
-
-    function applyItemEffect(item){
-      if(item.type === 'click'){
-        state.clickPower += item.effect;
-      } else if(item.type === 'auto'){
-        state.autoCount += item.effect;
-      } else if(item.type === 'mult'){
-        state.clickPower *= item.effect;
-      } else if(item.type === 'temp_click'){
-        boostTemporary('clickPower', item.effect, 30000);
-      } else if(item.type === 'temp_auto'){
-        boostTemporary('autoCount', item.effect, 30000);
-      } else if(item.type === 'temp_all'){
-        boostTemporary('all', item.effect, 30000);
-      }
-    }
-
-    function boostTemporary(stat, multiplier, duration){
-      const originalClick = state.clickPower;
-      const originalAuto = state.autoCount;
-      if(stat === 'clickPower') state.clickPower *= multiplier;
-      else if(stat === 'autoCount') state.autoCount *= multiplier;
-      else if(stat === 'all'){ 
-        state.clickPower *= multiplier;
-        state.autoCount *= multiplier;
-      }
-      flashAchievement('Boost Active!');
-      render();
-      setTimeout(()=>{
-        state.clickPower = originalClick;
-        state.autoCount = originalAuto;
-        render();
-        flashAchievement('Boost Ended!');
-      }, duration);
-    }
-
-    function recalcCPS(){
-      state.cps = state.autoCount * state.clickPower;
-    }
-
-    function doClick(){
-      state.coins += state.clickPower;
-      playClick();
-      checkAchievements();
-      render();
-    }
-
-    clickArea.addEventListener('click', () => {
-      doClick();
-      clickArea.animate([{transform:'scale(1)'},{transform:'scale(0.96)'},{transform:'scale(1)'}],{duration:160});
-    });
-
-    window.addEventListener('keydown', (e) => {
-      if(e.code === 'Space' || e.key === 'Enter'){
-        e.preventDefault();
-        doClick();
-      }
-    });
-
-    setInterval(() => {
-      if(state.autoCount > 0){
-        state.coins += state.autoCount * state.clickPower / 10;
-      }
-    }, 100);
-
-    setInterval(() => {
-      recalcCPS();
-      render();
-    }, 1000);
-
-    function save(){
-      try{ localStorage.setItem('clicker_state_v2', JSON.stringify(state)); }catch(e){ console.warn('Save failed', e); }
-    }
-
-    saveBtn.addEventListener('click', () => { save(); flashText('Saved'); });
-    function flashText(t){
-      const old = saveBtn.textContent;
-      saveBtn.textContent = t;
-      setTimeout(()=>saveBtn.textContent = old,800);
-    }
-
-    resetBtn.addEventListener('click', () => {
-      if(!confirm('Reset game? This will clear progress.')) return;
-      state = JSON.parse(JSON.stringify(DEFAULT));
-      save(); render();
-    });
-
-    function renderAchievements(){
-      achListEl.innerHTML = '';
-      const list = [];
-      if(state.achievements.firstClick) list.push('First Click');
-      if(state.achievements.hundred) list.push('100 Coins');
-      if(state.achievements.thousand) list.push('1,000 Coins');
-      if(list.length === 0) achListEl.innerHTML = '<div class="ach">None yet — earn coins!</div>';
-      else list.forEach(a => { const d = document.createElement('div'); d.className='ach'; d.textContent = a; achListEl.appendChild(d); });
-    }
-
-    function checkAchievements(){
-      if(!state.achievements.firstClick && state.coins > 0){ state.achievements.firstClick = true; flashAchievement('First Click!'); }
-      if(!state.achievements.hundred && state.coins >= 100){ state.achievements.hundred = true; flashAchievement('100 Coins!'); }
-      if(!state.achievements.thousand && state.coins >= 1000){ state.achievements.thousand = true; flashAchievement('1,000 Coins!'); }
-      save();
-    }
-
-    function flashAchievement(text){
-      const el = document.createElement('div');
-      el.textContent = text; el.style.position='fixed'; el.style.left='50%'; el.style.top='10%'; el.style.transform='translateX(-50%)';
-      el.style.padding='10px 16px'; el.style.background='#0f2a3a'; el.style.border='1px solid rgba(255,255,255,0.04)'; el.style.borderRadius='8px'; el.style.zIndex='9999';
-      document.body.appendChild(el);
-      setTimeout(()=>el.style.opacity='0',1200);
-      setTimeout(()=>el.remove(),1800);
-    }
-
-    function load(){
-      try{
-        const raw = localStorage.getItem('clicker_state_v2');
-        if(!raw) return null;
-        const s = JSON.parse(raw);
-        s.shop = s.shop || DEFAULT.shop;
-        s.achievements = s.achievements || DEFAULT.achievements;
-        s.clickPower = s.clickPower || DEFAULT.clickPower;
-        s.autoCount = s.autoCount || DEFAULT.autoCount;
-        recalcFromShop(s);
-        return s;
-      }catch(e){console.warn('Load failed', e); return null}
-    }
-
-    function recalcFromShop(s){
-      let cp = 1; let ac = 0;
-      s.shop.forEach(item => {
-        if(item.type === 'click') cp += (item.level || 0) * item.effect;
-        if(item.type === 'auto') ac += (item.level || 0) * item.effect;
-        if(item.type === 'mult'){ for(let i=0;i<(item.level||0);i++) cp *= item.effect; }
-      });
-      s.clickPower = cp; s.autoCount = ac; s.cps = ac * cp;
-    }
-
-    setInterval(save, 3000);
-    render();
-  </script>
+  <script src="script.js" type="module"></script>
 </body>
 </html>
